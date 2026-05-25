@@ -11,7 +11,17 @@ const ACTION_COLORS = {
   warn:    0xFEE75C,
 };
 
-async function executeModAction(interaction, action, target, reason, durationMs = null) {
+// Maps each action to the exact tag name(s) in the mod-moderation-logs forum
+const ACTION_TAGS = {
+  kick:    ['Discord Kick'],
+  ban:     ['Discord Ban'],
+  timeout: ['Mute'],
+  mute:    ['Mute'],
+  unmute:  [],
+  warn:    ['Warning'],
+};
+
+async function executeModAction(interaction, action, target, reason, durationMs = null, appealable = null) {
   const guild = interaction.guild;
   const mod = interaction.user;
 
@@ -70,7 +80,16 @@ async function executeModAction(interaction, action, target, reason, durationMs 
       const staffHub = await interaction.client.guilds.fetch(config.staffHubGuildId);
       const forum = await staffHub.channels.fetch(config.modLogsForumId);
       if (forum && forum.isThreadOnly()) {
-        const tag = forum.availableTags.find(t => t.name.toLowerCase() === action.toLowerCase());
+        // Build the list of tag names to apply
+        const tagNames = [...(ACTION_TAGS[action] ?? [])];
+        if (appealable === true)  tagNames.push('Appealable');
+        if (appealable === false) tagNames.push('Unappealable');
+
+        const appliedTags = tagNames
+          .map(name => forum.availableTags.find(t => t.name === name))
+          .filter(Boolean)
+          .map(t => t.id);
+
         const embed = new EmbedBuilder()
           .setTitle(`Case #${caseId} — ${action.toUpperCase()}`)
           .setColor(ACTION_COLORS[action] ?? 0x5865F2)
@@ -82,12 +101,13 @@ async function executeModAction(interaction, action, target, reason, durationMs 
             { name: 'Timestamp',  value: `<t:${Math.floor(Date.now() / 1000)}:F>`,     inline: true },
             { name: 'Reason',     value: reason,                                       inline: false },
           );
-        if (durationMs) embed.addFields({ name: 'Duration', value: formatDuration(durationMs), inline: true });
+        if (durationMs)           embed.addFields({ name: 'Duration',   value: formatDuration(durationMs),                  inline: true });
+        if (appealable !== null)  embed.addFields({ name: 'Appealable', value: appealable ? 'Yes' : 'No', inline: true });
 
         await forum.threads.create({
           name: `Case #${caseId} — ${action.toUpperCase()} — ${target.username}`,
           message: { embeds: [embed] },
-          appliedTags: tag ? [tag.id] : [],
+          appliedTags,
         });
       }
     } catch (forumErr) {
@@ -96,9 +116,10 @@ async function executeModAction(interaction, action, target, reason, durationMs 
     }
 
     // 4. Reply to the moderator
-    const durationText = durationMs ? ` for **${formatDuration(durationMs)}**` : '';
+    const durationText  = durationMs     ? `\n⏱️ **Duration:** ${formatDuration(durationMs)}` : '';
+    const appealText    = appealable !== null ? `\n⚖️ **Appealable:** ${appealable ? 'Yes' : 'No'}` : '';
     await interaction.reply({
-      content: `✅ **${action.toUpperCase()}** | Case #${caseId}\n👤 **User:** ${target.username}\n📋 **Reason:** ${reason}${durationText}`,
+      content: `✅ **${action.toUpperCase()}** | Case #${caseId}\n👤 **User:** ${target.username}\n📋 **Reason:** ${reason}${durationText}${appealText}`,
       ephemeral: true,
     });
 
