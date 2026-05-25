@@ -1,5 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
 const { getNextCaseId, logAction } = require('./sheets');
+const { isWhitelisted } = require('./permissions');
 const config = require('../config');
 
 const ACTION_COLORS = {
@@ -53,7 +54,12 @@ async function executeModAction(interaction, action, target, reason, durationMs 
     // 1. Defer reply immediately so Discord doesn't time out (3s limit)
     await interaction.deferReply({ ephemeral: true });
 
-    // 2. DM the user before acting (so they're reachable before a ban/kick)
+    // 2. Check whitelist
+    if (await isWhitelisted(guild, target.id)) {
+      return interaction.editReply({ content: '❌ That user is whitelisted and cannot be punished.' });
+    }
+
+    // 3. DM the user before acting (so they're reachable before a ban/kick)
     await sendPunishmentDM(target, action, guild.name, reason, durationMs, appealable);
 
     // 2. Perform the Discord action
