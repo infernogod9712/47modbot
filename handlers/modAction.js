@@ -50,14 +50,17 @@ async function executeModAction(interaction, action, target, reason, durationMs 
   const mod = interaction.user;
 
   try {
-    // 1. DM the user before acting (so they're reachable before a ban/kick)
+    // 1. Defer reply immediately so Discord doesn't time out (3s limit)
+    await interaction.deferReply({ ephemeral: true });
+
+    // 2. DM the user before acting (so they're reachable before a ban/kick)
     await sendPunishmentDM(target, action, guild.name, reason, durationMs, appealable);
 
     // 2. Perform the Discord action
     switch (action) {
       case 'kick': {
         const member = await guild.members.fetch(target.id).catch(() => null);
-        if (!member) return interaction.reply({ content: '❌ That user is not in this server.', ephemeral: true });
+        if (!member) return interaction.editReply({ content: '❌ That user is not in this server.' });
         await member.kick(reason);
         break;
       }
@@ -66,19 +69,19 @@ async function executeModAction(interaction, action, target, reason, durationMs 
         break;
       case 'timeout': {
         const member = await guild.members.fetch(target.id).catch(() => null);
-        if (!member) return interaction.reply({ content: '❌ That user is not in this server.', ephemeral: true });
+        if (!member) return interaction.editReply({ content: '❌ That user is not in this server.' });
         await member.timeout(durationMs, reason);
         break;
       }
       case 'mute': {
         const member = await guild.members.fetch(target.id).catch(() => null);
-        if (!member) return interaction.reply({ content: '❌ That user is not in this server.', ephemeral: true });
+        if (!member) return interaction.editReply({ content: '❌ That user is not in this server.' });
         await member.roles.add(config.muteRoleId, reason);
         break;
       }
       case 'unmute': {
         const member = await guild.members.fetch(target.id).catch(() => null);
-        if (!member) return interaction.reply({ content: '❌ That user is not in this server.', ephemeral: true });
+        if (!member) return interaction.editReply({ content: '❌ That user is not in this server.' });
         await member.roles.remove(config.muteRoleId, reason);
         break;
       }
@@ -145,9 +148,8 @@ async function executeModAction(interaction, action, target, reason, durationMs 
     // 5. Reply to the moderator
     const durationText  = durationMs     ? `\n⏱️ **Duration:** ${formatDuration(durationMs)}` : '';
     const appealText    = appealable !== null ? `\n⚖️ **Appealable:** ${appealable ? 'Yes' : 'No'}` : '';
-    await interaction.reply({
+    await interaction.editReply({
       content: `✅ **${action.toUpperCase()}** | Case #${caseId}\n👤 **User:** ${target.username}\n📋 **Reason:** ${reason}${durationText}${appealText}`,
-      ephemeral: true,
     });
 
   } catch (err) {
@@ -155,7 +157,7 @@ async function executeModAction(interaction, action, target, reason, durationMs 
     const msg = err.code === 50013
       ? '❌ I don\'t have permission to do that.'
       : `❌ Something went wrong: ${err.message}`;
-    if (interaction.replied || interaction.deferred) await interaction.followUp({ content: msg, ephemeral: true });
+    if (interaction.deferred || interaction.replied) await interaction.editReply({ content: msg });
     else await interaction.reply({ content: msg, ephemeral: true });
   }
 }
