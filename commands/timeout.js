@@ -5,7 +5,7 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('timeout')
     .setDescription('Temporarily mute a user (Discord timeout — max 28d)')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+
     .addUserOption(opt =>
       opt.setName('user').setDescription('The user to timeout').setRequired(true))
     .addStringOption(opt =>

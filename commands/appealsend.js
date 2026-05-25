@@ -5,7 +5,7 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('appealsend')
     .setDescription('Mark a punishment as appealed in the mod logs forum')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+
     .addIntegerOption(opt =>
       opt.setName('case').setDescription('Case number to appeal').setRequired(true).setMinValue(1))
     .addStringOption(opt =>

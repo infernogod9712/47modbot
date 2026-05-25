@@ -5,7 +5,7 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('warn')
     .setDescription('Issue a formal warning to a user')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+
     .addUserOption(opt =>
       opt.setName('user').setDescription('The user to warn').setRequired(true))
     .addStringOption(opt =>

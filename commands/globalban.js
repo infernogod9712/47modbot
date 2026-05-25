@@ -6,7 +6,7 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('globalban')
     .setDescription('Ban a user from ALL servers the bot is in')
-    .setDefaultMemberPermissions(PermissionFlagsBits.BanMembers)
+
     .addUserOption(opt =>
       opt.setName('user').setDescription('The user to globally ban').setRequired(true))
     .addStringOption(opt =>

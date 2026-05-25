@@ -5,7 +5,7 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('punishlogs')
     .setDescription('Show all punishments logged for a user')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+
     .addUserOption(opt =>
       opt.setName('user').setDescription('The user to look up').setRequired(true)),
 

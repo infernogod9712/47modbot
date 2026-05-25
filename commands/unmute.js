@@ -5,7 +5,7 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('unmute')
     .setDescription('Remove a user\'s mute role')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+
     .addUserOption(opt =>
       opt.setName('user').setDescription('The user to unmute').setRequired(true))
     .addStringOption(opt =>
