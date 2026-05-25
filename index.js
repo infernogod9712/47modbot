@@ -26,6 +26,17 @@ client.on('interactionCreate', async interaction => {
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
 
+  const PUBLIC_COMMANDS = ['ping', 'larp'];
+  if (PUBLIC_COMMANDS.includes(interaction.commandName)) {
+    try { await command.execute(interaction); } catch (err) {
+      console.error(`[Command Error] /${interaction.commandName}:`, err);
+      const msg = { content: '❌ An error occurred running that command.', ephemeral: true };
+      if (interaction.replied || interaction.deferred) await interaction.followUp(msg);
+      else await interaction.reply(msg);
+    }
+    return;
+  }
+
   const isAdmin = interaction.member?.permissions?.has(PermissionFlagsBits.Administrator);
   // /setpermission is admin-only, skip role check
   if (!isAdmin && interaction.commandName !== 'setpermission') {
