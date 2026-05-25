@@ -20,10 +20,22 @@ client.once('ready', () => {
   console.log(`[47ModBot] In ${client.guilds.cache.size} server(s)`);
 });
 
+const ALLOWED_ROLES = [
+  '1362956860025602281',
+  '1397773943880024186',
+  '1369814540878876692',
+];
+
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
+
+  const hasRole = interaction.member?.roles?.cache?.some(r => ALLOWED_ROLES.includes(r.id));
+  if (!hasRole) {
+    return interaction.reply({ content: '❌ You do not have permission to use this command.', ephemeral: true });
+  }
+
   try {
     await command.execute(interaction);
   } catch (err) {
