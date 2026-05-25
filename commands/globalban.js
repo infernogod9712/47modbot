@@ -26,6 +26,19 @@ module.exports = {
     const appealable = interaction.options.getString('appealable') === 'yes';
     const mod        = interaction.user;
 
+    // DM before banning so they're still reachable
+    try {
+      const dmEmbed = new EmbedBuilder()
+        .setTitle('S47 Moderation Notice')
+        .setColor(0xFF0000)
+        .setDescription('You have been **globally banned** from all S47 servers.')
+        .addFields(
+          { name: 'Reason',     value: reason,                   inline: false },
+          { name: 'Appealable', value: appealable ? 'Yes' : 'No', inline: true },
+        );
+      await target.send({ embeds: [dmEmbed] });
+    } catch { /* DMs disabled — ignore */ }
+
     const guilds = interaction.client.guilds.cache;
     let success = 0, failed = 0;
     const failedServers = [];

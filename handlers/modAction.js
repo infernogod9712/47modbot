@@ -21,12 +21,39 @@ const ACTION_TAGS = {
   warn:    ['Warning'],
 };
 
+const DM_MESSAGES = {
+  kick:    (server)          => `You have been **kicked** from **${server}**.`,
+  ban:     (server)          => `You have been **banned** from **${server}**.`,
+  timeout: (server, dur)     => `You have been **timed out** in **${server}** for **${dur}**.`,
+  mute:    (server)          => `You have been **muted** in **${server}**.`,
+  unmute:  (server)          => `Your mute has been **lifted** in **${server}**.`,
+  warn:    (server)          => `You have received a **warning** in **${server}**.`,
+};
+
+async function sendPunishmentDM(target, action, server, reason, durationMs, appealable) {
+  try {
+    const description = DM_MESSAGES[action]?.(server, durationMs ? formatDuration(durationMs) : '') ?? '';
+    const embed = new EmbedBuilder()
+      .setTitle('S47 Moderation Notice')
+      .setColor(ACTION_COLORS[action] ?? 0x5865F2)
+      .setDescription(description)
+      .addFields({ name: 'Reason', value: reason, inline: false });
+    if (appealable !== null) embed.addFields({ name: 'Appealable', value: appealable ? 'Yes' : 'No', inline: true });
+    await target.send({ embeds: [embed] });
+  } catch {
+    // DMs can fail if user has them disabled — silently ignore
+  }
+}
+
 async function executeModAction(interaction, action, target, reason, durationMs = null, appealable = null) {
   const guild = interaction.guild;
   const mod = interaction.user;
 
   try {
-    // 1. Perform the Discord action
+    // 1. DM the user before acting (so they're reachable before a ban/kick)
+    await sendPunishmentDM(target, action, guild.name, reason, durationMs, appealable);
+
+    // 2. Perform the Discord action
     switch (action) {
       case 'kick': {
         const member = await guild.members.fetch(target.id).catch(() => null);
@@ -60,7 +87,7 @@ async function executeModAction(interaction, action, target, reason, durationMs 
         break;
     }
 
-    // 2. Get next case ID and log to Google Sheets
+    // 3. Get next case ID and log to Google Sheets
     const caseId = await getNextCaseId();
     const timestamp = new Date().toISOString();
     await logAction({
@@ -75,7 +102,7 @@ async function executeModAction(interaction, action, target, reason, durationMs 
       reason,
     });
 
-    // 3. Create forum post in staff hub mod-moderation-logs
+    // 4. Create forum post in staff hub mod-moderation-logs
     try {
       const staffHub = await interaction.client.guilds.fetch(config.staffHubGuildId);
       const forum = await staffHub.channels.fetch(config.modLogsForumId);
@@ -115,7 +142,7 @@ async function executeModAction(interaction, action, target, reason, durationMs 
       // Don't fail the whole command if forum post fails
     }
 
-    // 4. Reply to the moderator
+    // 5. Reply to the moderator
     const durationText  = durationMs     ? `\n⏱️ **Duration:** ${formatDuration(durationMs)}` : '';
     const appealText    = appealable !== null ? `\n⚖️ **Appealable:** ${appealable ? 'Yes' : 'No'}` : '';
     await interaction.reply({
@@ -149,4 +176,4 @@ function formatDuration(ms) {
   return `${Math.floor(s / 86400)}d`;
 }
 
-module.exports = { executeModAction, parseDuration };
+module.exports = { executeModAction, parseDuration, formatDuration };
