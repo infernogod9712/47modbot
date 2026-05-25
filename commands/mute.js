@@ -4,7 +4,7 @@ const { executeModAction } = require('../handlers/modAction');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('mute')
-    .setDescription('Permanently mute a user via role')
+    .setDescription('Permanently mute a user via role until removed')
 
     .addUserOption(opt =>
       opt.setName('user').setDescription('The user to mute').setRequired(true))

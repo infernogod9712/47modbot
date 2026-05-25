@@ -26,7 +26,7 @@ const DM_MESSAGES = {
   kick:    (server)          => `You have been **kicked** from **${server}**.`,
   ban:     (server)          => `You have been **banned** from **${server}**.`,
   timeout: (server, dur)     => `You have been **timed out** in **${server}** for **${dur}**.`,
-  mute:    (server)          => `You have been **muted** in **${server}**.`,
+  mute:    (server)          => `You have been **permanently muted** in **${server}**. You will remain muted until a staff member removes your mute.`,
   unmute:  (server)          => `Your mute has been **lifted** in **${server}**.`,
   warn:    (server)          => `You have received a **warning** in **${server}**.`,
 };
