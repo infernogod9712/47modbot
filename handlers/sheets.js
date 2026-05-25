@@ -38,4 +38,16 @@ async function logAction({ caseId, timestamp, server, action, user, userId, mod,
   });
 }
 
-module.exports = { getNextCaseId, logAction };
+async function getLogsForUser(userId) {
+  const auth = await getAuth();
+  const sheets = google.sheets({ version: 'v4', auth });
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: config.googleSheetId,
+    range: 'Logs!A:I',
+  });
+  const rows = res.data.values || [];
+  // Row 0 is header, filter by User ID (column F = index 5)
+  return rows.slice(1).filter(row => row[5] === userId);
+}
+
+module.exports = { getNextCaseId, logAction, getLogsForUser };
