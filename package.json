@@ -1,0 +1,13 @@
+{
+  "name": "47modbot",
+  "version": "1.0.0",
+  "description": "S47 unified moderation bot — logs all actions to Google Sheets and staff hub forum",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.0",
+    "googleapis": "^144.0.0"
+  }
+}
