@@ -1,8 +1,9 @@
 const { Client, GatewayIntentBits, Collection, PermissionFlagsBits } = require('discord.js');
 const { getRoles } = require('./handlers/permissions');
+const { setSessionStatus, buildSettingUpEmbed } = require('./handlers/ssu');
+const config = require('./config');
 const fs = require('fs');
 const path = require('path');
-const config = require('./config');
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
@@ -22,6 +23,25 @@ client.once('ready', () => {
 });
 
 client.on('interactionCreate', async interaction => {
+  // Button: End Poll
+  if (interaction.isButton() && interaction.customId.startsWith('endpoll_')) {
+    const creatorId = interaction.customId.split('_')[1];
+    const isAdmin   = interaction.member?.permissions?.has(PermissionFlagsBits.Administrator);
+    if (interaction.user.id !== creatorId && !isAdmin) {
+      return interaction.reply({ content: '❌ Only the poll creator or an administrator can end this poll.', ephemeral: true });
+    }
+    try {
+      await interaction.deferUpdate();
+      await interaction.message.delete();
+      const pollChannel = await client.channels.fetch(config.ssuPollChannelId);
+      await pollChannel.send({ embeds: [buildSettingUpEmbed()] });
+      await setSessionStatus(client, 'settingup');
+    } catch (err) {
+      console.error('[EndPoll] Error:', err);
+    }
+    return;
+  }
+
   if (!interaction.isChatInputCommand()) return;
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
@@ -38,7 +58,6 @@ client.on('interactionCreate', async interaction => {
   }
 
   const isAdmin = interaction.member?.permissions?.has(PermissionFlagsBits.Administrator);
-  // /setpermission is admin-only, skip role check
   if (!isAdmin && interaction.commandName !== 'setpermission') {
     const allowedRoles = getRoles(interaction.guild.id);
     const hasRole = interaction.member?.roles?.cache?.some(r => allowedRoles.includes(r.id));
