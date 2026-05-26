@@ -58,7 +58,14 @@ client.on('interactionCreate', async interaction => {
   }
 
   const isAdmin = interaction.member?.permissions?.has(PermissionFlagsBits.Administrator);
-  if (!isAdmin && interaction.commandName !== 'setpermission') {
+
+  const SSU_COMMANDS = ['serverpoll', 'ssumessage', 'ssdmessage'];
+  if (SSU_COMMANDS.includes(interaction.commandName)) {
+    const hasSSURole = interaction.member?.roles?.cache?.has(config.ssuRoleId);
+    if (!isAdmin && !hasSSURole) {
+      return interaction.reply({ content: '❌ You do not have permission to use this command.', ephemeral: true });
+    }
+  } else if (!isAdmin && interaction.commandName !== 'setpermission') {
     const allowedRoles = getRoles(interaction.guild.id);
     const hasRole = interaction.member?.roles?.cache?.some(r => allowedRoles.includes(r.id));
     if (!hasRole) {
