@@ -27,8 +27,15 @@ module.exports = {
       .setImage(screenshot.url);
 
     await shutdownChannel.send({ embeds: [embed] });
-    await setSessionStatus(interaction.client, 'offline');
 
-    await interaction.editReply({ content: '✅ Shutdown message sent! Status set to 🔴 OFFLINE.' });
+    let statusNote = '';
+    try {
+      await setSessionStatus(interaction.client, 'offline');
+    } catch (err) {
+      console.error('[ssdmessage] Status channel update failed:', err.message);
+      statusNote = '\n⚠️ Could not update status channel — check bot permissions.';
+    }
+
+    await interaction.editReply({ content: `✅ Shutdown message sent! Status set to 🔴 OFFLINE.${statusNote}` });
   },
 };

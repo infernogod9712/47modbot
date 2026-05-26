@@ -35,7 +35,11 @@ client.on('interactionCreate', async interaction => {
       await interaction.message.delete();
       const pollChannel = await client.channels.fetch(config.ssuPollChannelId);
       await pollChannel.send({ embeds: [buildSettingUpEmbed()] });
-      await setSessionStatus(client, 'settingup');
+      try {
+        await setSessionStatus(client, 'settingup');
+      } catch (err) {
+        console.error('[EndPoll] Status channel update failed:', err.message);
+      }
     } catch (err) {
       console.error('[EndPoll] Error:', err);
     }

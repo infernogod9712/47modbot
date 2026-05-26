@@ -53,8 +53,15 @@ module.exports = {
 
     const startupChannel = await interaction.client.channels.fetch(config.ssuStartupChannelId);
     await startupChannel.send({ embeds: [embed] });
-    await setSessionStatus(interaction.client, 'online');
 
-    await interaction.editReply({ content: '✅ Start up message sent! Status set to 🟢 ONLINE.' });
+    let statusNote = '';
+    try {
+      await setSessionStatus(interaction.client, 'online');
+    } catch (err) {
+      console.error('[ssumessage] Status channel update failed:', err.message);
+      statusNote = '\n⚠️ Could not update status channel — check bot permissions.';
+    }
+
+    await interaction.editReply({ content: `✅ Start up message sent! Status set to 🟢 ONLINE.${statusNote}` });
   },
 };
