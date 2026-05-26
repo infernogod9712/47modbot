@@ -26,6 +26,16 @@ module.exports = {
       )
       .setImage(screenshot.url);
 
+    // Delete the last startup message
+    try {
+      const startupChannel = await interaction.client.channels.fetch(config.ssuStartupChannelId);
+      const messages = await startupChannel.messages.fetch({ limit: 1 });
+      const last = messages.first();
+      if (last) await last.delete();
+    } catch (err) {
+      console.error('[ssdmessage] Could not delete startup message:', err.message);
+    }
+
     await shutdownChannel.send({ embeds: [embed] });
 
     let statusNote = '';
