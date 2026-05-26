@@ -1,12 +1,18 @@
 const { Client, GatewayIntentBits, Collection, PermissionFlagsBits } = require('discord.js');
 const { getRoles } = require('./handlers/permissions');
 const { setSessionStatus, buildSettingUpEmbed } = require('./handlers/ssu');
+const { handlePrefixCommand } = require('./handlers/prefixHandler');
 const config = require('./config');
 const fs = require('fs');
 const path = require('path');
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+  ],
 });
 
 // Load all command files from /commands
@@ -86,6 +92,8 @@ client.on('interactionCreate', async interaction => {
     else await interaction.reply(msg);
   }
 });
+
+client.on('messageCreate', message => handlePrefixCommand(message));
 
 client.on('error', err => console.error('[Client Error]', err));
 process.on('unhandledRejection', err => console.error('[Unhandled Rejection]', err));
