@@ -50,7 +50,7 @@ client.on('interactionCreate', async interaction => {
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
 
-  const PUBLIC_COMMANDS = ['ping', 'larp'];
+  const PUBLIC_COMMANDS = ['ping', 'larp', 'glaze'];
   if (PUBLIC_COMMANDS.includes(interaction.commandName)) {
     try { await command.execute(interaction); } catch (err) {
       console.error(`[Command Error] /${interaction.commandName}:`, err);
