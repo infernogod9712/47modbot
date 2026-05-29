@@ -1,8 +1,9 @@
 const { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, PermissionFlagsBits } = require('discord.js');
 const { executeModAction, parseDuration } = require('./modAction');
-const { getNextCaseId, logAction, getLogsForUser } = require('./sheets');
+const { getNextCaseId, logAction, logRbxAction, fetchAllLogsForUser } = require('./sheets');
 const { getRoles, addRole, removeRole, getWhitelist, addToWhitelist, removeFromWhitelist } = require('./permissions');
 const { setSessionStatus, buildSettingUpEmbed } = require('./ssu');
+const { buildPunishPage } = require('../commands/punishlogs');
 const config = require('../config');
 
 // Wraps a Message so executeModAction can treat it like an interaction
@@ -267,24 +268,11 @@ async function handlePrefixCommand(message) {
         if (!target) return message.reply({ content: '❌ User not found.' });
 
         await ctx.deferReply();
-        const rows = await getLogsForUser(target.id);
-        if (rows.length === 0) return ctx.editReply({ content: `✅ No punishment logs found for **${target.username}**.` });
+        const allRows = await fetchAllLogsForUser(target.id);
+        if (allRows.length === 0) return ctx.editReply({ content: `✅ No punishment logs found for **${target.username}**.` });
 
-        const recent = rows.slice(-10).reverse();
-        const fields = recent.map(row => {
-          const [caseId, timestamp, server, action, , , mod, , reason] = row;
-          const date = timestamp ? `<t:${Math.floor(new Date(timestamp).getTime() / 1000)}:d>` : 'Unknown';
-          return { name: `Case #${caseId} — ${action} (${date})`, value: `**Server:** ${server}\n**Mod:** ${mod}\n**Reason:** ${reason}`, inline: false };
-        });
-
-        const embed = new EmbedBuilder()
-          .setTitle(`Punishment Logs — ${target.username}`)
-          .setColor(0x5865F2)
-          .setDescription(`**${rows.length}** total punishment(s)${rows.length > 10 ? ' — showing most recent 10' : ''}`)
-          .addFields(fields)
-          .setFooter({ text: `User ID: ${target.id}` });
-
-        await ctx.editReply({ embeds: [embed] });
+        const { embed, components } = buildPunishPage(target.id, target.username, allRows, 0);
+        await ctx.editReply({ embeds: [embed], components });
         break;
       }
 

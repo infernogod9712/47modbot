@@ -5,7 +5,12 @@ const FILE = path.join(__dirname, '../data/guild_permissions.json');
 
 function load() {
   if (!fs.existsSync(FILE)) return {};
-  return JSON.parse(fs.readFileSync(FILE, 'utf8'));
+  try {
+    const content = fs.readFileSync(FILE, 'utf8').trim();
+    return content ? JSON.parse(content) : {};
+  } catch {
+    return {};
+  }
 }
 
 function save(data) {
