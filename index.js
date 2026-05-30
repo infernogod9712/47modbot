@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Collection, PermissionFlagsBits, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, Collection, PermissionFlagsBits, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
 const cron = require('node-cron');
 const { getRoles } = require('./handlers/permissions');
 const { isLocked } = require('./handlers/lockdown');
@@ -8,6 +8,8 @@ const { fetchAllLogsForUser, getWeeklyShiftData, getAllActiveShifts, setTimeOver
 const { buildPunishPage } = require('./commands/punishlogs');
 const { buildWeeklyTotals, buildQuotaEmbed } = require('./commands/quotacheck');
 const { getISOWeek, parseDurationInput, formatDuration, scheduleAllReminders } = require('./handlers/shiftAction');
+const { autoWarn } = require('./handlers/modAction');
+const { getProtected, incrementPinger, resetPinger } = require('./handlers/pingWarn');
 const config = require('./config');
 const fs = require('fs');
 const path = require('path');
@@ -164,7 +166,7 @@ client.on('interactionCreate', async interaction => {
   const SSU_COMMANDS   = ['serverpoll', 'ssumessage', 'ssdmessage'];
   const RBX_COMMANDS   = ['rbxverbalwarn', 'rbxwarn', 'rbxmute', 'rbxkick', 'rbxban', 'rbxblacklist', 'rbxglobalblacklist'];
   const SHIFT_COMMANDS    = ['shiftstart', 'shiftend', 'shiftcheck', 'quotacheck', 'shiftleaderboard', 'settime'];
-  const SELF_REG_COMMANDS = ['botlockdown', 'botunlock', 'channellock', 'channelunlock', 'serverlock', 'serverunlock', 'staffblacklist'];
+  const SELF_REG_COMMANDS = ['botlockdown', 'botunlock', 'channellock', 'channelunlock', 'serverlock', 'serverunlock', 'staffblacklist', 'setpingwarn', 'pingwarnreset'];
 
   if (SSU_COMMANDS.includes(interaction.commandName)) {
     const hasSSURole = interaction.member?.roles?.cache?.has(config.ssuRoleId);
@@ -198,7 +200,83 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-client.on('messageCreate', message => handlePrefixCommand(message));
+async function handlePingWarn(message) {
+  if (message.author.bot || !message.guild || message.mentions.users.size === 0) return;
+
+  const allowedRoles = getRoles(message.guild.id);
+  const isAdmin = message.member?.permissions?.has(PermissionFlagsBits.Administrator);
+  const isMod   = message.member?.roles?.cache?.some(r => allowedRoles.includes(r.id));
+  if (isAdmin || isMod) return;
+
+  const uniqueMentioned = [...new Set(message.mentions.users.keys())];
+
+  for (const mentionedId of uniqueMentioned) {
+    if (mentionedId === message.author.id) continue;
+
+    const entry = getProtected(mentionedId);
+    if (!entry?.enabled) continue;
+
+    const count = incrementPinger(mentionedId, message.author.id);
+    const { threshold, autoWarn: shouldAutoWarn } = entry;
+
+    if (count === 1) {
+      await message.reply({ content: `⚠️ **Warning** — <@${mentionedId}> does not want to be pinged.` }).catch(() => {});
+
+    } else if (count < threshold) {
+      const remaining = threshold - count;
+      await message.author.send(
+        `⚠️ You have **${remaining}** more ping(s) before a formal warning is issued for pinging <@${mentionedId}>.`
+      ).catch(() => {});
+
+    } else {
+      const protectedUser = await message.client.users.fetch(mentionedId).catch(() => null);
+      const reason = `Repeatedly pinging a protected member (reached ${threshold}-ping threshold) — Ping Protection`;
+
+      if (shouldAutoWarn) {
+        try {
+          const caseId = await autoWarn(message.client, message.guild, message.author, message.client.user, reason);
+          await message.reply({ content: `🚨 <@${message.author.id}> has been formally warned (Case #${caseId}) for repeatedly pinging <@${mentionedId}>.` }).catch(() => {});
+        } catch (err) {
+          console.error('[PingWarn] autoWarn failed:', err);
+        }
+      } else {
+        try {
+          const notifyChannel = await message.client.channels.fetch(config.staffPunishmentsChannelId);
+          const embed = new EmbedBuilder()
+            .setTitle('⚠️ Ping Warn — Threshold Reached')
+            .setColor(0xFFA500)
+            .setDescription('This user has reached the ping threshold. No auto-warn was issued — manual action required.')
+            .addFields(
+              { name: 'Pinger',    value: `<@${message.author.id}> (${message.author.username})`,                  inline: true },
+              { name: 'Protected', value: `<@${mentionedId}> (${protectedUser?.username ?? mentionedId})`,          inline: true },
+              { name: 'Pings',     value: `${count}/${threshold}`,                                                  inline: true },
+              { name: 'Server',    value: message.guild.name,                                                       inline: true },
+              { name: 'Channel',   value: `<#${message.channel.id}>`,                                               inline: true },
+              { name: 'Timestamp', value: `<t:${Math.floor(Date.now() / 1000)}:F>`,                                 inline: true },
+            );
+          await notifyChannel.send({ embeds: [embed] });
+          await message.reply({ content: `⚠️ <@${message.author.id}> has reached the ping limit for <@${mentionedId}>. Mods have been notified.` }).catch(() => {});
+        } catch (err) {
+          console.error('[PingWarn] notify-mods failed:', err);
+        }
+      }
+
+      if (protectedUser) {
+        const notifyMsg = shouldAutoWarn
+          ? `🛡️ **${message.author.username}** was automatically warned for pinging you ${threshold} times in **${message.guild.name}**.`
+          : `🛡️ **${message.author.username}** reached your ping threshold (${threshold}) in **${message.guild.name}**. Mods have been notified.`;
+        await protectedUser.send(notifyMsg).catch(() => {});
+      }
+
+      resetPinger(mentionedId, message.author.id);
+    }
+  }
+}
+
+client.on('messageCreate', async message => {
+  handlePrefixCommand(message);
+  await handlePingWarn(message);
+});
 
 client.on('error', err => console.error('[Client Error]', err));
 process.on('unhandledRejection', err => console.error('[Unhandled Rejection]', err));

@@ -184,4 +184,48 @@ function formatDuration(ms) {
   return `${Math.floor(s / 86400)}d`;
 }
 
-module.exports = { executeModAction, parseDuration, formatDuration };
+async function autoWarn(client, guild, target, botUser, reason) {
+  await sendPunishmentDM(target, 'warn', guild.name, reason, null, null);
+
+  const caseId    = await getNextCaseId();
+  const timestamp = new Date().toISOString();
+  await logAction({
+    caseId, timestamp,
+    server:  guild.name,
+    action:  'WARN',
+    user:    target.username,  userId:  target.id,
+    mod:     botUser.username, modId:   botUser.id,
+    reason,
+  });
+
+  try {
+    const staffHub = await client.guilds.fetch(config.staffHubGuildId);
+    const forum    = await staffHub.channels.fetch(config.modLogsForumId);
+    if (forum?.isThreadOnly()) {
+      const warnTag     = forum.availableTags.find(t => t.name === 'Warning');
+      const appliedTags = warnTag ? [warnTag.id] : [];
+      const embed = new EmbedBuilder()
+        .setTitle(`Case #${caseId} — WARN (Auto)`)
+        .setColor(ACTION_COLORS.warn)
+        .addFields(
+          { name: 'Action',    value: 'WARN — Ping Protection (Auto)',           inline: true },
+          { name: 'User',      value: `<@${target.id}> (${target.username})`,    inline: true },
+          { name: 'Issued by', value: `${botUser.username} (Ping Protection)`,   inline: true },
+          { name: 'Server',    value: guild.name,                                inline: true },
+          { name: 'Timestamp', value: `<t:${Math.floor(Date.now() / 1000)}:F>`,  inline: true },
+          { name: 'Reason',    value: reason,                                    inline: false },
+        );
+      await forum.threads.create({
+        name:    `Case #${caseId} — WARN — ${target.username}`,
+        message: { embeds: [embed] },
+        appliedTags,
+      });
+    }
+  } catch (err) {
+    console.error('[autoWarn] Forum post failed:', err.message);
+  }
+
+  return caseId;
+}
+
+module.exports = { executeModAction, autoWarn, parseDuration, formatDuration };

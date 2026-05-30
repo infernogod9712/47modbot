@@ -73,6 +73,14 @@ Auto-posts quota check every **Sunday 6:00 PM EST**. Bot DMs you after **3 hours
 | `/ssumessage` | Send a session startup message |
 | `/ssdmessage` | Send a session shutdown message |
 
+### Ping Protection *(high command only)*
+| Command | Description |
+|---------|-------------|
+| `/setpingwarn enabled threshold auto_warn decay_days` | Configure ping protection for yourself |
+| `/pingwarnreset @protected @pinger` | *(Admin)* Reset a user's ping count |
+
+**How it works:** 1st ping → public warning in channel. Subsequent pings → DM to pinger with remaining count. At threshold → formal warn auto-issued (or mods notified if `auto_warn` is off). Protected user is DM'd when threshold is reached. Mod/admin users are always exempt. Count resets after `decay_days` days of inactivity (default: 7).
+
 ### Public
 | Command | Description |
 |---------|-------------|
@@ -133,6 +141,7 @@ Upload all files except `config.js`, `credentials.json`, and `node_modules/`.
 │   ├── serverlock.js / serverunlock.js
 │   ├── botlockdown.js / botunlock.js
 │   ├── staffblacklist.js / findid.js
+│   ├── setpingwarn.js / pingwarnreset.js
 │   ├── setpermission.js / whitelist.js
 │   └── serverpoll.js / ssumessage.js / ssdmessage.js / ping.js / larp.js / glaze.js
 └── handlers/
@@ -142,6 +151,7 @@ Upload all files except `config.js`, `credentials.json`, and `node_modules/`.
     ├── sheets.js             Google Sheets API wrapper
     ├── permissions.js        Role/whitelist management
     ├── lockdown.js           Bot lockdown flag
+    ├── pingWarn.js           Ping protection data handler
     ├── prefixHandler.js      m! prefix commands
     └── ssu.js                Session start/shutdown logic
 ```
