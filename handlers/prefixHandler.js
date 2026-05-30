@@ -732,8 +732,7 @@ async function handlePrefixCommand(message) {
       }
 
       case 'setpingwarn': {
-        const allowedRoles = getRoles(message.guild.id);
-        const hasRole = message.member?.roles?.cache?.some(r => allowedRoles.includes(r.id));
+        const hasRole = message.member?.roles?.cache?.some(r => config.pingWarnRoleIds.includes(r.id));
         if (!isAdmin && !hasRole)
           return message.reply({ content: '❌ Only high command members can use ping protection.' });
 

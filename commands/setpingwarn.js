@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const { getProtected, setProtected } = require('../handlers/pingWarn');
-const { getRoles } = require('../handlers/permissions');
+const config = require('../config');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -17,8 +17,7 @@ module.exports = {
 
   async execute(interaction) {
     const isAdmin = interaction.member?.permissions?.has(PermissionFlagsBits.Administrator);
-    const allowedRoles = getRoles(interaction.guild.id);
-    const hasRole = interaction.member?.roles?.cache?.some(r => allowedRoles.includes(r.id));
+    const hasRole = interaction.member?.roles?.cache?.some(r => config.pingWarnRoleIds.includes(r.id));
 
     if (!isAdmin && !hasRole) {
       return interaction.reply({ content: '❌ Only high command members can use ping protection.', ephemeral: true });
