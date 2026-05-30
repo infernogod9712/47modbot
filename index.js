@@ -232,33 +232,40 @@ async function handlePingWarn(message) {
       const protectedUser = await message.client.users.fetch(mentionedId).catch(() => null);
       const reason = `Repeatedly pinging a protected member (reached ${threshold}-ping threshold) — Ping Protection`;
 
+      let caseId = null;
       if (shouldAutoWarn) {
         try {
-          const caseId = await autoWarn(message.client, message.guild, message.author, message.client.user, reason);
+          caseId = await autoWarn(message.client, message.guild, message.author, message.client.user, reason);
           await message.reply({ content: `🚨 <@${message.author.id}> has been formally warned (Case #${caseId}) for repeatedly pinging <@${mentionedId}>.` }).catch(() => {});
         } catch (err) {
           console.error('[PingWarn] autoWarn failed:', err);
         }
       } else {
-        try {
-          const notifyChannel = await message.client.channels.fetch(config.staffPunishmentsChannelId);
-          const embed = new EmbedBuilder()
-            .setTitle('⚠️ Ping Warn — Threshold Reached')
-            .setColor(0xFFA500)
-            .setDescription('This user has reached the ping threshold. No auto-warn was issued — manual action required.')
-            .addFields(
-              { name: 'Pinger',    value: `<@${message.author.id}> (${message.author.username})`,                  inline: true },
-              { name: 'Protected', value: `<@${mentionedId}> (${protectedUser?.username ?? mentionedId})`,          inline: true },
-              { name: 'Pings',     value: `${count}/${threshold}`,                                                  inline: true },
-              { name: 'Server',    value: message.guild.name,                                                       inline: true },
-              { name: 'Channel',   value: `<#${message.channel.id}>`,                                               inline: true },
-              { name: 'Timestamp', value: `<t:${Math.floor(Date.now() / 1000)}:F>`,                                 inline: true },
-            );
-          await notifyChannel.send({ embeds: [embed] });
-          await message.reply({ content: `⚠️ <@${message.author.id}> has reached the ping limit for <@${mentionedId}>. Mods have been notified.` }).catch(() => {});
-        } catch (err) {
-          console.error('[PingWarn] notify-mods failed:', err);
-        }
+        await message.reply({ content: `⚠️ <@${message.author.id}> has reached the ping limit for <@${mentionedId}>. Mods have been notified.` }).catch(() => {});
+      }
+
+      // Always post a forum report to staff punishments
+      try {
+        const forum = await message.client.channels.fetch(config.staffPunishmentsChannelId);
+        const embed = new EmbedBuilder()
+          .setTitle('🔔 Ping Warn Report')
+          .setColor(shouldAutoWarn ? 0xFEE75C : 0xFFA500)
+          .addFields(
+            { name: 'Pinger',    value: `<@${message.author.id}> (${message.author.username})`,               inline: true },
+            { name: 'Protected', value: `<@${mentionedId}> (${protectedUser?.username ?? mentionedId})`,       inline: true },
+            { name: 'Pings',     value: `${count}/${threshold}`,                                               inline: true },
+            { name: 'Server',    value: message.guild.name,                                                    inline: true },
+            { name: 'Channel',   value: `<#${message.channel.id}>`,                                            inline: true },
+            { name: 'Action',    value: shouldAutoWarn ? `Formal warn issued — Case #${caseId}` : 'Manual action required', inline: true },
+            { name: 'Timestamp', value: `<t:${Math.floor(Date.now() / 1000)}:F>`,                              inline: false },
+          );
+        await forum.threads.create({
+          name: `Ping Report — ${message.author.username} → ${protectedUser?.username ?? mentionedId}`,
+          message: { embeds: [embed] },
+          appliedTags: [],
+        });
+      } catch (err) {
+        console.error('[PingWarn] Forum post failed:', err.message);
       }
 
       if (protectedUser) {
