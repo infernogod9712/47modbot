@@ -12,7 +12,11 @@ function load() {
 }
 
 function save(data) {
-  fs.writeFileSync(FILE, JSON.stringify(data, null, 2));
+  try {
+    fs.writeFileSync(FILE, JSON.stringify(data, null, 2));
+  } catch (err) {
+    console.error('[PingWarn] Failed to save ping_warns.json:', err.message);
+  }
 }
 
 function getProtected(userId) {
