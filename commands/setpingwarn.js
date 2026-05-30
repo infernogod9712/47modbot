@@ -17,7 +17,7 @@ module.exports = {
 
   async execute(interaction) {
     const isAdmin = interaction.member?.permissions?.has(PermissionFlagsBits.Administrator);
-    const hasRole = interaction.member?.roles?.cache?.some(r => config.pingWarnRoleIds.includes(r.id));
+    const hasRole = interaction.member?.roles?.cache?.some(r => (config.pingWarnRoleIds ?? []).includes(r.id));
 
     if (!isAdmin && !hasRole) {
       return interaction.reply({ content: '❌ Only high command members can use ping protection.', ephemeral: true });
