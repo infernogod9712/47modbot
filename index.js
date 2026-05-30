@@ -166,7 +166,7 @@ client.on('interactionCreate', async interaction => {
   const SSU_COMMANDS   = ['serverpoll', 'ssumessage', 'ssdmessage'];
   const RBX_COMMANDS   = ['rbxverbalwarn', 'rbxwarn', 'rbxmute', 'rbxkick', 'rbxban', 'rbxblacklist', 'rbxglobalblacklist'];
   const SHIFT_COMMANDS    = ['shiftstart', 'shiftend', 'shiftcheck', 'quotacheck', 'shiftleaderboard', 'settime'];
-  const SELF_REG_COMMANDS = ['botlockdown', 'botunlock', 'channellock', 'channelunlock', 'serverlock', 'serverunlock', 'staffblacklist', 'setpingwarn', 'pingwarnreset'];
+  const SELF_REG_COMMANDS = ['botlockdown', 'botunlock', 'channellock', 'channelunlock', 'serverlock', 'serverunlock', 'staffblacklist', 'setpingwarn', 'pingwarnoff', 'pingwarnreset'];
 
   if (SSU_COMMANDS.includes(interaction.commandName)) {
     const hasSSURole = interaction.member?.roles?.cache?.has(config.ssuRoleId);

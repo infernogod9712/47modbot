@@ -67,7 +67,7 @@ async function handlePrefixCommand(message) {
   const isAdmin      = message.member?.permissions?.has(PermissionFlagsBits.Administrator);
   const PUBLIC       = ['ping', 'larp', 'glaze', 'findid', 'shiftstart', 'shiftend', 'shiftcheck', 'shiftleaderboard'];
   const SSU          = ['serverpoll', 'ssumessage', 'ssdmessage'];
-  const SELF_REG     = ['quotacheck', 'settime', 'botlockdown', 'botunlock', 'channellock', 'channelunlock', 'serverlock', 'serverunlock', 'staffblacklist', 'purgemessages', 'setpingwarn', 'pingwarnreset'];
+  const SELF_REG     = ['quotacheck', 'settime', 'botlockdown', 'botunlock', 'channellock', 'channelunlock', 'serverlock', 'serverunlock', 'staffblacklist', 'purgemessages', 'setpingwarn', 'pingwarnoff', 'pingwarnreset'];
 
   // Permission gate
   if (!PUBLIC.includes(cmd)) {
@@ -762,6 +762,18 @@ async function handlePrefixCommand(message) {
           `**Count decay:** ${decayDays === 0 ? 'Never resets' : `Resets after ${decayDays} day(s) of no pings`}`,
         ];
         await message.reply({ content: lines.join('\n') });
+        break;
+      }
+
+      case 'pingwarnoff': {
+        const hasRole = message.member?.roles?.cache?.some(r => (config.pingWarnRoleIds ?? []).includes(r.id));
+        if (!isAdmin && !hasRole)
+          return message.reply({ content: '❌ Only high command members can use ping protection.' });
+        const existing = getProtected(message.author.id);
+        if (!existing || !existing.enabled)
+          return message.reply({ content: '⚠️ Your ping protection is already off.' });
+        setProtected(message.author.id, { ...existing, enabled: false });
+        await message.reply({ content: '🔓 Ping protection disabled.' });
         break;
       }
 
