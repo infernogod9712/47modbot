@@ -1,6 +1,8 @@
 const { Client, GatewayIntentBits, Collection, PermissionFlagsBits, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
 const cron = require('node-cron');
+const { createClient } = require('@supabase/supabase-js');
 const { getRoles, getTier } = require('./handlers/permissions');
+const { executeCommand } = require('./handlers/queueHandler');
 const { isLocked } = require('./handlers/lockdown');
 const { isEnabled } = require('./handlers/systemToggle');
 const { setSessionStatus, buildSettingUpEmbed } = require('./handlers/ssu');
@@ -37,6 +39,31 @@ client.once('ready', async () => {
   console.log(`[47ModBot] Online as ${client.user.tag}`);
   console.log(`[47ModBot] In ${client.guilds.cache.size} server(s)`);
   await scheduleAllReminders(client);
+
+  // ── Dashboard command queue ──────────────────────────────────────────────
+  if (process.env.SUPABASE_URL && process.env.SUPABASE_KEY) {
+    const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+    setInterval(async () => {
+      try {
+        const { data } = await sb.from('bot_commands').select('*').eq('status','pending').limit(5);
+        for (const row of (data ?? [])) {
+          await sb.from('bot_commands').update({ status:'processing' }).eq('id', row.id);
+          try {
+            const result = await executeCommand(row.command, row.args, row.requested_by, client);
+            await sb.from('bot_commands').update({ status:'done', result, completed_at: new Date().toISOString() }).eq('id', row.id);
+          } catch (err) {
+            console.error(`[Queue] Error executing ${row.command}:`, err.message);
+            await sb.from('bot_commands').update({ status:'error', result: err.message }).eq('id', row.id);
+          }
+        }
+      } catch (err) {
+        console.error('[Queue] Poll error:', err.message);
+      }
+    }, 3000);
+    console.log('[47ModBot] Dashboard queue polling started.');
+  } else {
+    console.warn('[47ModBot] SUPABASE_URL/SUPABASE_KEY not set — dashboard queue disabled.');
+  }
 });
 
 // ─── Auto quota check — every Sunday 6:00 PM Eastern ────────────────────────
