@@ -1,10 +1,12 @@
 const { EmbedBuilder } = require('discord.js');
 const { getNextCaseId, logAction, logRbxAction, fetchAllLogsForUser,
-        getActiveShift, getWeeklyShiftData, getAllActiveShifts } = require('./sheets');
+        getActiveShift, getWeeklyShiftData, getAllActiveShifts,
+        startShift, endShift, logShiftHistory } = require('./sheets');
 const { parseDuration, formatDuration: fmtDur } = require('./modAction');
 const { getISOWeek, formatDuration, getQuotaTier }                = require('./shiftAction');
 const { buildWeeklyTotals }                                        = require('../commands/quotacheck');
 const { setEnabled, getAll }                                       = require('./systemToggle');
+const { setLocked }                                                = require('./lockdown');
 const { setProtected, getProtected }                               = require('./pingWarn');
 const { setHost }                                                  = require('./session');
 const { setSessionStatus, buildSettingUpEmbed }                    = require('./ssu');
@@ -200,6 +202,27 @@ async function runRbxAction(cmdName, args, requesterId, client) {
 }
 
 // ─── info commands ───────────────────────────────────────────────────────────
+
+async function runShiftstart(requesterId, client) {
+  const user = await fetchMod(requesterId, client);
+  const existing = await getActiveShift(requesterId);
+  if (existing) return `❌ You already have an active shift running.`;
+  const startTime = new Date().toISOString();
+  await startShift(requesterId, user.username, startTime);
+  return `✅ Shift started for ${user.username} at ${new Date().toLocaleTimeString()}.`;
+}
+
+async function runShiftend(requesterId, client) {
+  const user = await fetchMod(requesterId, client);
+  const result = await endShift(requesterId);
+  if (!result) return `❌ You don't have an active shift.`;
+  const { startTime, timeOverrideMs } = result;
+  const startMs  = new Date(startTime).getTime();
+  const durationMs = timeOverrideMs ?? (Date.now() - startMs);
+  const { week, year } = getISOWeek();
+  await logShiftHistory({ userId:requesterId, username:user.username, startTime, endTime:new Date().toISOString(), durationMs, weekNum:week, year, note:'Dashboard' });
+  return `✅ Shift ended for ${user.username}. Duration: ${formatDuration(durationMs)}.`;
+}
 
 async function runPunishlogs(args) {
   const rows = await fetchAllLogsForUser(args.user);
@@ -442,6 +465,8 @@ async function executeCommand(cmdName, args, requesterId, client) {
   if (RBX_CMDS.includes(cmdName)) return runRbxAction(cmdName, args, requesterId, client);
 
   switch (cmdName) {
+    case 'shiftstart':     return runShiftstart(requesterId, client);
+    case 'shiftend':       return runShiftend(requesterId, client);
     case 'punishlogs':     return runPunishlogs(args);
     case 'shiftcheck':     return runShiftcheck({ ...args, requested_by: requesterId });
     case 'shiftleaderboard': return runShiftleaderboard();
@@ -470,6 +495,9 @@ async function executeCommand(cmdName, args, requesterId, client) {
     case 'pingwarnreset':   return runPingwarnreset(args, client);
     case 'purgemessages':   return runPurgemessages(args, client);
     case 'appealsend':      return runAppealsend(args, client);
+
+    case 'botlockdown':  setLocked(true);  return '🔒 Bot locked down. All non-public commands are blocked.';
+    case 'botunlock':    setLocked(false); return '🔓 Bot unlocked. Commands are available again.';
 
     default: throw new Error(`Unknown command: ${cmdName}`);
   }
