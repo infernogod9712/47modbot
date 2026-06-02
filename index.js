@@ -1,3 +1,4 @@
+require('dotenv').config();
 const { Client, GatewayIntentBits, Collection, PermissionFlagsBits, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
 const cron = require('node-cron');
 const { createClient } = require('@supabase/supabase-js');
