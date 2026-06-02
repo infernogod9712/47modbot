@@ -2,6 +2,7 @@ const { Client, GatewayIntentBits, Collection, PermissionFlagsBits, EmbedBuilder
 const cron = require('node-cron');
 const { getRoles, getTier } = require('./handlers/permissions');
 const { isLocked } = require('./handlers/lockdown');
+const { isEnabled } = require('./handlers/systemToggle');
 const { setSessionStatus, buildSettingUpEmbed } = require('./handlers/ssu');
 const { handlePrefixCommand } = require('./handlers/prefixHandler');
 const { fetchAllLogsForUser, getWeeklyShiftData, getAllActiveShifts, setTimeOverride } = require('./handlers/sheets');
@@ -159,6 +160,7 @@ client.on('interactionCreate', async interaction => {
     purgemessages: 'staff', punishlogs: 'staff', appealsend: 'staff',
 
     serverpoll: 'ssu', ssumessage: 'ssu', ssdmessage: 'ssu', changehost: 'ssu',
+    systemtoggle: 'admin',
 
     quotacheck: 'admin', settime: 'admin', botlockdown: 'admin', botunlock: 'admin',
     setpermission: 'admin', whitelist: 'admin',
@@ -199,6 +201,13 @@ client.on('interactionCreate', async interaction => {
     }
   }
 
+  // ── System toggle silent blocks ───────────────────────────────────────────
+  const SSU_CMDS   = ['serverpoll', 'ssumessage', 'ssdmessage', 'changehost'];
+  const SHIFT_CMDS = ['shiftstart', 'shiftend', 'shiftcheck', 'shiftleaderboard', 'quotacheck'];
+
+  if (SSU_CMDS.includes(interaction.commandName) && !isEnabled('ssu')) return;
+  if (SHIFT_CMDS.includes(interaction.commandName) && !isEnabled('shift')) return;
+
   try {
     await command.execute(interaction);
   } catch (err) {
@@ -210,6 +219,7 @@ client.on('interactionCreate', async interaction => {
 });
 
 async function handlePingWarn(message) {
+  if (!isEnabled('pingwarn')) return;
   if (message.author.bot || !message.guild || message.mentions.users.size === 0) return;
   if (message.guild.id !== config.mainGuildId) return;
   if (message.reference) return; // ignore replies — mention in a reply doesn't count as a ping
@@ -292,6 +302,7 @@ async function handlePingWarn(message) {
 }
 
 async function handlePermReqFormat(message) {
+  if (!isEnabled('permrequest')) return;
   if (message.channel.id !== config.ssuModRequestId) return;
   if (message.author.bot) return;
   if (message.content.includes('!ignore!')) return;
