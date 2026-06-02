@@ -79,4 +79,40 @@ async function isWhitelisted(guild, userId) {
   }
 }
 
-module.exports = { getRoles, addRole, removeRole, addToWhitelist, removeFromWhitelist, getWhitelist, isWhitelisted };
+// ─── MAIN-GUILD TIER SYSTEM ───────────────────────────────────────────────────
+const { PermissionFlagsBits } = require('discord.js');
+
+const MAIN_GUILD_ID = '1362955808836681969';
+const ADMIN_ROLES   = ['1397773943880024186', '1467581712207712477', '1362956860025602281'];
+const STAFF_ROLES   = ['1369814540878876692', '1363261537225146538'];
+const SSU_ROLES     = ['1373307403155804371'];
+
+const _tierCache = new Map(); // userId → { tier, expiresAt }
+const CACHE_TTL  = 5 * 60 * 1000;
+
+async function getTier(userId, client) {
+  const cached = _tierCache.get(userId);
+  if (cached && Date.now() < cached.expiresAt) return cached.tier;
+
+  let tier = 'public';
+  try {
+    const mainGuild = await client.guilds.fetch(MAIN_GUILD_ID);
+    const member    = await mainGuild.members.fetch(userId);
+    const roleIds   = [...member.roles.cache.keys()];
+
+    if (member.permissions.has(PermissionFlagsBits.Administrator) || ADMIN_ROLES.some(r => roleIds.includes(r))) {
+      tier = 'admin';
+    } else if (STAFF_ROLES.some(r => roleIds.includes(r))) {
+      tier = 'staff';
+    } else if (SSU_ROLES.some(r => roleIds.includes(r))) {
+      tier = 'ssu';
+    }
+  } catch {
+    // User not in main server or fetch failed → public
+  }
+
+  _tierCache.set(userId, { tier, expiresAt: Date.now() + CACHE_TTL });
+  return tier;
+}
+
+module.exports = { getRoles, addRole, removeRole, addToWhitelist, removeFromWhitelist, getWhitelist, isWhitelisted, getTier };

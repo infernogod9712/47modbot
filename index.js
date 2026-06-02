@@ -1,6 +1,6 @@
 const { Client, GatewayIntentBits, Collection, PermissionFlagsBits, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
 const cron = require('node-cron');
-const { getRoles } = require('./handlers/permissions');
+const { getRoles, getTier } = require('./handlers/permissions');
 const { isLocked } = require('./handlers/lockdown');
 const { setSessionStatus, buildSettingUpEmbed } = require('./handlers/ssu');
 const { handlePrefixCommand } = require('./handlers/prefixHandler');
@@ -10,6 +10,7 @@ const { buildWeeklyTotals, buildQuotaEmbed } = require('./commands/quotacheck');
 const { getISOWeek, parseDurationInput, formatDuration, scheduleAllReminders } = require('./handlers/shiftAction');
 const { autoWarn } = require('./handlers/modAction');
 const { getProtected, incrementPinger, resetPinger } = require('./handlers/pingWarn');
+const { getHost } = require('./handlers/session');
 const config = require('./config');
 const fs = require('fs');
 const path = require('path');
@@ -145,48 +146,56 @@ client.on('interactionCreate', async interaction => {
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
 
-  const PUBLIC_COMMANDS = ['ping', 'larp', 'glaze', 'findid'];
-  if (PUBLIC_COMMANDS.includes(interaction.commandName)) {
-    try { await command.execute(interaction); } catch (err) {
-      console.error(`[Command Error] /${interaction.commandName}:`, err);
-      const msg = { content: '❌ An error occurred running that command.', ephemeral: true };
-      if (interaction.replied || interaction.deferred) await interaction.followUp(msg);
-      else await interaction.reply(msg);
-    }
-    return;
+  // ── Command tier map ──────────────────────────────────────────────────────
+  const COMMAND_TIERS = {
+    ping: 'public', larp: 'public', glaze: 'public', findid: 'public',
+
+    warn: 'staff', mute: 'staff', timeout: 'staff', unmute: 'staff', kick: 'staff', ban: 'staff',
+    rbxverbalwarn: 'staff', rbxwarn: 'staff', rbxmute: 'staff', rbxkick: 'staff',
+    rbxban: 'staff', rbxblacklist: 'staff', rbxglobalblacklist: 'staff',
+    shiftstart: 'staff', shiftend: 'staff', shiftcheck: 'staff', shiftleaderboard: 'staff',
+    channellock: 'staff', channelunlock: 'staff', serverlock: 'staff', serverunlock: 'staff',
+    staffblacklist: 'staff', setpingwarn: 'staff', pingwarnoff: 'staff', pingwarnreset: 'staff',
+    purgemessages: 'staff', punishlogs: 'staff', appealsend: 'staff',
+
+    serverpoll: 'ssu', ssumessage: 'ssu', ssdmessage: 'ssu', changehost: 'ssu',
+
+    quotacheck: 'admin', settime: 'admin', botlockdown: 'admin', botunlock: 'admin',
+    setpermission: 'admin', whitelist: 'admin',
+  };
+
+  function tierAllows(userTier, required) {
+    if (userTier === 'admin') return true;
+    if (required === 'public') return true;
+    if (required === 'ssu') return userTier === 'ssu';
+    if (required === 'staff') return userTier === 'staff';
+    return false;
   }
 
-  // Lockdown check — block all non-public commands except /botunlock
-  if (isLocked() && interaction.commandName !== 'botunlock') {
+  const required = COMMAND_TIERS[interaction.commandName] ?? 'admin';
+
+  // ── Lockdown check — block all non-public commands except /botunlock ──────
+  if (required !== 'public' && isLocked() && interaction.commandName !== 'botunlock') {
     return interaction.reply({ content: 'THE BOT HAS BEEN LOCKED DOWN BY SITE OFFICIALS.' });
   }
 
-  const isAdmin = interaction.member?.permissions?.has(PermissionFlagsBits.Administrator);
+  if (required !== 'public') {
+    const userTier = await getTier(interaction.user.id, client);
 
-  const SSU_COMMANDS   = ['serverpoll', 'ssumessage', 'ssdmessage'];
-  const RBX_COMMANDS   = ['rbxverbalwarn', 'rbxwarn', 'rbxmute', 'rbxkick', 'rbxban', 'rbxblacklist', 'rbxglobalblacklist'];
-  const SHIFT_COMMANDS    = ['shiftstart', 'shiftend', 'shiftcheck', 'quotacheck', 'shiftleaderboard', 'settime'];
-  const SELF_REG_COMMANDS = ['botlockdown', 'botunlock', 'channellock', 'channelunlock', 'serverlock', 'serverunlock', 'staffblacklist', 'setpingwarn', 'pingwarnoff', 'pingwarnreset'];
+    let effectiveTier = userTier;
+    // Per-server override: admins can grant staff-level access via /setpermission
+    if (!tierAllows(userTier, required) && required === 'staff') {
+      const overrideRoles = getRoles(interaction.guild.id);
+      const hasOverride = interaction.member?.roles?.cache?.some(r => overrideRoles.includes(r.id));
+      if (hasOverride) effectiveTier = 'staff';
+    }
 
-  if (SSU_COMMANDS.includes(interaction.commandName)) {
-    const hasSSURole = interaction.member?.roles?.cache?.has(config.ssuRoleId);
-    if (!isAdmin && !hasSSURole) {
-      return interaction.reply({ content: '❌ You do not have permission to use this command.', ephemeral: true });
-    }
-  } else if (RBX_COMMANDS.includes(interaction.commandName)) {
-    const hasRbxRole = interaction.member?.roles?.cache?.some(r => config.rbxModRoles?.includes(r.id));
-    if (!isAdmin && !hasRbxRole) {
-      return interaction.reply({ content: '❌ You do not have permission to use this command.', ephemeral: true });
-    }
-  } else if (SHIFT_COMMANDS.includes(interaction.commandName)) {
-    // Shift commands self-regulate
-  } else if (SELF_REG_COMMANDS.includes(interaction.commandName)) {
-    // These commands handle their own permission checks internally
-  } else if (!isAdmin && interaction.commandName !== 'setpermission') {
-    const allowedRoles = getRoles(interaction.guild.id);
-    const hasRole = interaction.member?.roles?.cache?.some(r => allowedRoles.includes(r.id));
-    if (!hasRole) {
-      return interaction.reply({ content: '❌ You do not have permission to use this command.', ephemeral: true });
+    if (!tierAllows(effectiveTier, required)) {
+      const labels = { staff: 'Staff', ssu: 'SSU', admin: 'Administrator' };
+      return interaction.reply({
+        content: `❌ You need the **${labels[required]}** role in the main S47 server to use this command.`,
+        ephemeral: true,
+      });
     }
   }
 
@@ -202,6 +211,8 @@ client.on('interactionCreate', async interaction => {
 
 async function handlePingWarn(message) {
   if (message.author.bot || !message.guild || message.mentions.users.size === 0) return;
+  if (message.guild.id !== config.mainGuildId) return;
+  if (message.reference) return; // ignore replies — mention in a reply doesn't count as a ping
 
   const allowedRoles = getRoles(message.guild.id);
   const isAdmin = message.member?.permissions?.has(PermissionFlagsBits.Administrator);
@@ -280,9 +291,44 @@ async function handlePingWarn(message) {
   }
 }
 
+async function handlePermReqFormat(message) {
+  if (message.channel.id !== config.ssuModRequestId) return;
+  if (message.author.bot) return;
+  if (message.content.includes('!ignore!')) return;
+
+  const hostId = getHost();
+  const text = message.content;
+  const has = field => new RegExp(`^${field}\\s*:`, 'im').test(text);
+
+  const hasUsername   = has('Username');
+  const hasDepartment = has('Department');
+  const hasFaction    = has('Faction');
+  const hasRank       = has('Rank');
+
+  const valid =
+    (hasUsername && hasDepartment && hasRank) ||
+    (hasUsername && hasFaction    && hasRank) ||
+    (hasUsername && hasRank && !hasDepartment && !hasFaction);
+
+  if (!hostId) return;
+
+  if (!valid) {
+    await message.reply(
+      `❌ Follow the correct format:\n\n` +
+      '**Department Mod**\n```\nUsername: \nDepartment: \nRank: \n```\n' +
+      '**Faction Mod**\n```\nUsername: \nFaction: \nRank: \n```\n' +
+      '**Normal Mod / Staff / Director O5**\n```\nUsername: \nRank: \n```'
+    ).catch(() => {});
+    return;
+  }
+
+  await message.reply(`<@${hostId}>`).catch(() => {});
+}
+
 client.on('messageCreate', async message => {
   handlePrefixCommand(message);
   await handlePingWarn(message);
+  await handlePermReqFormat(message);
 });
 
 client.on('error', err => console.error('[Client Error]', err));
