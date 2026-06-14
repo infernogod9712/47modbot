@@ -59,10 +59,13 @@ module.exports = {
             { name: 'Reason',     value: reason,                                   inline: false },
           );
 
+        const purgeTag   = forum.availableTags.find(t => t.name === 'Purged Messages');
+        const appliedTags = [purgeTag].filter(Boolean).map(t => t.id);
+
         await forum.threads.create({
           name:        `Case #${caseId} — PURGE — #${channel.name}`,
           message:     { embeds: [embed] },
-          appliedTags: [],
+          appliedTags,
         });
       }
     } catch (forumErr) {

@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, Collection, PermissionFlagsBits, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, Collection, PermissionFlagsBits, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, AttachmentBuilder } = require('discord.js');
 const cron = require('node-cron');
 const { createClient } = require('@supabase/supabase-js');
 const { getRoles, getTier } = require('./handlers/permissions');
@@ -84,7 +84,318 @@ cron.schedule('0 18 * * 0', async () => {
   }
 }, { timezone: 'America/New_York' });
 
+// ─── Appeals helpers ─────────────────────────────────────────────────────────
+
+function hasAppealsStaff(member) {
+  if (member.permissions.has(PermissionFlagsBits.Administrator)) return true;
+  return config.appealsStaffRoles.some(id => member.roles.cache.has(id));
+}
+
+async function generateAppealsTranscript(channel, closedBy) {
+  let all = [];
+  let lastId;
+  while (true) {
+    const opts = { limit: 100 };
+    if (lastId) opts.before = lastId;
+    const batch = await channel.messages.fetch(opts);
+    if (!batch.size) break;
+    all = all.concat(Array.from(batch.values()));
+    lastId = batch.last().id;
+    if (batch.size < 100) break;
+  }
+  all.reverse();
+  const lines = all.map(m => {
+    const t    = new Date(m.createdTimestamp).toUTCString();
+    const atts = m.attachments.map(a => ` [attachment: ${a.url}]`).join('');
+    return `[${t}] ${m.author.tag}: ${m.content}${atts}`;
+  });
+  return {
+    text: `Transcript for #${channel.name}\nClosed by: ${closedBy}\nMessages: ${all.length}\n\n${lines.join('\n')}`,
+    count: all.length,
+  };
+}
+
+async function createAppealTicket(interaction, { category, prefix, title, fields }) {
+  await interaction.deferReply({ ephemeral: true });
+  const guild    = interaction.guild;
+  const user     = interaction.user;
+  const safeName = user.username.toLowerCase().replace(/[^a-z0-9]/g, '-').slice(0, 20);
+  const name     = `${prefix}-${safeName}`;
+
+  const channel = await guild.channels.create({
+    name,
+    type: ChannelType.GuildText,
+    parent: category,
+    permissionOverwrites: [
+      { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+      { id: user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
+      ...config.appealsStaffRoles.map(roleId => ({
+        id: roleId,
+        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageMessages],
+      })),
+    ],
+    topic: `category:${category}|opener:${user.id}`,
+  });
+
+  const welcomeEmbed = new EmbedBuilder()
+    .setTitle(`${title} — Opened`)
+    .setDescription(`Welcome ${user}! Your appeal has been submitted.\n\nPlease be patient while a staff member reviews your case.`)
+    .setColor(0x57F287)
+    .setTimestamp();
+
+  let detailsDesc = '';
+  for (const [label, value] of fields) {
+    detailsDesc += `**${label}:**\n${value || '—'}\n\n`;
+  }
+  const detailsEmbed = new EmbedBuilder()
+    .setTitle('Appeal Details')
+    .setDescription(detailsDesc.trim())
+    .setColor(0x2B2D31)
+    .setFooter({ text: 'Site 47 Appeals' });
+
+  const closeRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('appeals_close').setLabel('Close Ticket').setStyle(ButtonStyle.Danger).setEmoji('🔒'),
+  );
+
+  await channel.send({
+    content: `${user} | ${config.appealsStaffRoles.map(id => `<@&${id}>`).join(' ')}`,
+    embeds: [welcomeEmbed],
+    components: [closeRow],
+    allowedMentions: { parse: [] },
+  });
+  await channel.send({ embeds: [detailsEmbed] });
+  await interaction.editReply({ content: `✅ Your ticket has been created: ${channel}` });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 client.on('interactionCreate', async interaction => {
+
+  // ── Appeals server — fully self-contained block ───────────────────────────
+  if (interaction.guildId === config.appealsGuildId) {
+    const isAppealsStaff = interaction.member ? hasAppealsStaff(interaction.member) : false;
+
+    // Buttons
+    if (interaction.isButton()) {
+      if (interaction.customId === 'open_ingame') {
+        const modal = new ModalBuilder().setCustomId('modal_ingame').setTitle('In-Game Appeal');
+        modal.addComponents(
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('roblox_user').setLabel('Roblox Username').setStyle(TextInputStyle.Short).setRequired(true)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('punishment_type').setLabel('Punishment Type (Kick / Ban / Other)').setStyle(TextInputStyle.Short).setRequired(true)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reason_given').setLabel('Reason You Were Given').setStyle(TextInputStyle.Short).setRequired(true)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('explanation').setLabel('Why You Believe It Was Wrong').setStyle(TextInputStyle.Paragraph).setRequired(true)),
+        );
+        return interaction.showModal(modal);
+      }
+
+      if (interaction.customId === 'open_discord') {
+        const modal = new ModalBuilder().setCustomId('modal_discord').setTitle('Discord Appeal');
+        modal.addComponents(
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('discord_user').setLabel('Your Discord Username').setStyle(TextInputStyle.Short).setRequired(true)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('punishment_type').setLabel('Punishment Type (Warn / Mute / Kick / Ban)').setStyle(TextInputStyle.Short).setRequired(true)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reason_given').setLabel('Reason You Were Given').setStyle(TextInputStyle.Short).setRequired(true)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('explanation').setLabel('Why You Believe It Was Wrong').setStyle(TextInputStyle.Paragraph).setRequired(true)),
+        );
+        return interaction.showModal(modal);
+      }
+
+      if (interaction.customId === 'open_staffreport') {
+        const modal = new ModalBuilder().setCustomId('modal_staffreport').setTitle('Staff Report');
+        modal.addComponents(
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('staff_user').setLabel("Staff Member's Username").setStyle(TextInputStyle.Short).setRequired(true)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('what_happened').setLabel('What Happened').setStyle(TextInputStyle.Paragraph).setRequired(true)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('evidence').setLabel('Evidence (link or description)').setStyle(TextInputStyle.Short).setRequired(true)),
+          new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('notes').setLabel('Additional Notes').setStyle(TextInputStyle.Paragraph).setRequired(false)),
+        );
+        return interaction.showModal(modal);
+      }
+
+      if (interaction.customId === 'appeals_close') {
+        if (!isAppealsStaff) return interaction.reply({ content: '❌ Only staff can close tickets.', ephemeral: true });
+        const confirmRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('appeals_close_confirm').setLabel('Close').setStyle(ButtonStyle.Danger).setEmoji('🔒'),
+          new ButtonBuilder().setCustomId('appeals_close_cancel').setLabel('Cancel').setStyle(ButtonStyle.Secondary).setEmoji('✖️'),
+        );
+        return interaction.reply({ content: 'Are you sure you want to close this ticket?', components: [confirmRow] });
+      }
+
+      if (interaction.customId === 'appeals_close_cancel') {
+        return interaction.message.delete().catch(() => {});
+      }
+
+      if (interaction.customId === 'appeals_close_confirm') {
+        if (!isAppealsStaff) return interaction.reply({ content: '❌ Only staff can close tickets.', ephemeral: true });
+        await interaction.deferUpdate();
+        const channel = interaction.channel;
+
+        try {
+          const { text, count } = await generateAppealsTranscript(channel, interaction.user.tag);
+          const file = new AttachmentBuilder(Buffer.from(text, 'utf-8'), { name: `${channel.name}-transcript.txt` });
+          const transcriptCh = await client.channels.fetch(config.appealsTranscriptCh);
+          await transcriptCh.send({
+            embeds: [new EmbedBuilder().setTitle('🔒 Ticket Closed').setDescription(`**Channel:** ${channel.name}\n**Closed by:** ${interaction.user.tag}\n**Messages:** ${count}`).setColor(0xED4245).setTimestamp()],
+            files: [file],
+          });
+        } catch (err) {
+          console.error('[Appeals] Transcript error:', err.message);
+        }
+
+        const topic = channel.topic || '';
+        const openerMatch = topic.match(/opener:(\d+)/);
+        if (openerMatch) {
+          await channel.permissionOverwrites.edit(openerMatch[1], { ViewChannel: false }).catch(() => {});
+        }
+        if (!channel.name.startsWith('closed-')) {
+          await channel.setName(`closed-${channel.name}`.slice(0, 100)).catch(() => {});
+        }
+
+        const controlsRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('appeals_reopen').setLabel('Reopen').setStyle(ButtonStyle.Success).setEmoji('🔓'),
+          new ButtonBuilder().setCustomId('appeals_transcript').setLabel('Transcript').setStyle(ButtonStyle.Primary).setEmoji('📄'),
+          new ButtonBuilder().setCustomId('appeals_delete').setLabel('Delete').setStyle(ButtonStyle.Danger).setEmoji('🗑️'),
+        );
+        await channel.send({
+          embeds: [new EmbedBuilder().setTitle('Ticket Closed').setDescription(`Closed by **${interaction.user.tag}**`).setColor(0xED4245).setTimestamp()],
+          components: [controlsRow],
+        });
+        await interaction.message.delete().catch(() => {});
+        return;
+      }
+
+      if (interaction.customId === 'appeals_reopen') {
+        if (!isAppealsStaff) return interaction.reply({ content: '❌ Only staff can reopen tickets.', ephemeral: true });
+        await interaction.deferUpdate();
+        const channel = interaction.channel;
+        const topic   = channel.topic || '';
+        const openerMatch = topic.match(/opener:(\d+)/);
+        if (openerMatch) {
+          await channel.permissionOverwrites.edit(openerMatch[1], {
+            ViewChannel: true, SendMessages: true, ReadMessageHistory: true,
+          }).catch(() => {});
+        }
+        if (channel.name.startsWith('closed-')) {
+          await channel.setName(channel.name.slice(7)).catch(() => {});
+        }
+        const closeRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('appeals_close').setLabel('Close Ticket').setStyle(ButtonStyle.Danger).setEmoji('🔒'),
+        );
+        await channel.send({
+          embeds: [new EmbedBuilder().setTitle('Ticket Reopened').setDescription(`Reopened by **${interaction.user.tag}**`).setColor(0x57F287).setTimestamp()],
+          components: [closeRow],
+        });
+        return;
+      }
+
+      if (interaction.customId === 'appeals_transcript') {
+        if (!isAppealsStaff) return interaction.reply({ content: '❌ Only staff can generate transcripts.', ephemeral: true });
+        await interaction.deferReply({ ephemeral: true });
+        try {
+          const { text, count } = await generateAppealsTranscript(interaction.channel, interaction.user.tag);
+          const file = new AttachmentBuilder(Buffer.from(text, 'utf-8'), { name: `${interaction.channel.name}-transcript.txt` });
+          const transcriptCh = await client.channels.fetch(config.appealsTranscriptCh);
+          await transcriptCh.send({
+            embeds: [new EmbedBuilder().setTitle('📄 Ticket Transcript').setDescription(`**Channel:** ${interaction.channel.name}\n**Generated by:** ${interaction.user.tag}\n**Messages:** ${count}`).setColor(0x5865F2).setTimestamp()],
+            files: [file],
+          });
+          return interaction.editReply({ content: '✅ Transcript posted to the transcripts channel.' });
+        } catch (err) {
+          return interaction.editReply({ content: `❌ Failed: ${err.message}` });
+        }
+      }
+
+      if (interaction.customId === 'appeals_delete') {
+        if (!isAppealsStaff) return interaction.reply({ content: '❌ Only staff can delete tickets.', ephemeral: true });
+        const confirmRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('appeals_delete_confirm').setLabel('Delete Forever').setStyle(ButtonStyle.Danger).setEmoji('🗑️'),
+          new ButtonBuilder().setCustomId('appeals_delete_cancel').setLabel('Cancel').setStyle(ButtonStyle.Secondary).setEmoji('✖️'),
+        );
+        return interaction.reply({ content: '⚠️ This will permanently delete the ticket. Are you sure?', components: [confirmRow] });
+      }
+
+      if (interaction.customId === 'appeals_delete_cancel') {
+        return interaction.message.delete().catch(() => {});
+      }
+
+      if (interaction.customId === 'appeals_delete_confirm') {
+        if (!isAppealsStaff) return interaction.reply({ content: '❌ Only staff can delete tickets.', ephemeral: true });
+        await interaction.channel.delete().catch(() => {});
+        return;
+      }
+    }
+
+    // Modals
+    if (interaction.isModalSubmit()) {
+      if (interaction.customId === 'modal_ingame') {
+        return createAppealTicket(interaction, {
+          category: config.appealsCatRegular, prefix: 'ingame', title: 'In-Game Appeal',
+          fields: [
+            ['Roblox Username',   interaction.fields.getTextInputValue('roblox_user')],
+            ['Punishment Type',   interaction.fields.getTextInputValue('punishment_type')],
+            ['Reason Given',      interaction.fields.getTextInputValue('reason_given')],
+            ['Explanation',       interaction.fields.getTextInputValue('explanation')],
+          ],
+        });
+      }
+      if (interaction.customId === 'modal_discord') {
+        return createAppealTicket(interaction, {
+          category: config.appealsCatRegular, prefix: 'discord', title: 'Discord Appeal',
+          fields: [
+            ['Discord Username',  interaction.fields.getTextInputValue('discord_user')],
+            ['Punishment Type',   interaction.fields.getTextInputValue('punishment_type')],
+            ['Reason Given',      interaction.fields.getTextInputValue('reason_given')],
+            ['Explanation',       interaction.fields.getTextInputValue('explanation')],
+          ],
+        });
+      }
+      if (interaction.customId === 'modal_staffreport') {
+        return createAppealTicket(interaction, {
+          category: config.appealsCatStaff, prefix: 'report', title: 'Staff Report',
+          fields: [
+            ["Staff Member's Username", interaction.fields.getTextInputValue('staff_user')],
+            ['What Happened',           interaction.fields.getTextInputValue('what_happened')],
+            ['Evidence',                interaction.fields.getTextInputValue('evidence')],
+            ['Additional Notes',        interaction.fields.getTextInputValue('notes')],
+          ],
+        });
+      }
+    }
+
+    // Slash commands in appeals guild
+    if (interaction.isChatInputCommand()) {
+      if (!isAppealsStaff) {
+        return interaction.reply({ content: '❌ You do not have permission to use this command.', ephemeral: true });
+      }
+
+      if (interaction.commandName === 'appealspanel') {
+        const panelEmbed = new EmbedBuilder()
+          .setTitle('📋 Appeals Center')
+          .setDescription('Select the type of appeal or report below.\nA staff member will review your submission as soon as possible.')
+          .setColor(0x5865F2)
+          .setFooter({ text: 'Site 47 Appeals' });
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('open_ingame').setLabel('In-Game Appeal').setStyle(ButtonStyle.Primary).setEmoji('🎮'),
+          new ButtonBuilder().setCustomId('open_discord').setLabel('Discord Appeal').setStyle(ButtonStyle.Primary).setEmoji('💬'),
+          new ButtonBuilder().setCustomId('open_staffreport').setLabel('Staff Report').setStyle(ButtonStyle.Danger).setEmoji('🚨'),
+        );
+        await interaction.channel.send({ embeds: [panelEmbed], components: [row] });
+        return interaction.reply({ content: '✅ Appeals panel posted.', ephemeral: true });
+      }
+
+      if (interaction.commandName === 'migrate') {
+        const topic = interaction.channel.topic || '';
+        if (!topic.includes('opener:')) {
+          return interaction.reply({ content: '❌ This command can only be used inside a ticket channel.', ephemeral: true });
+        }
+        const choice = interaction.options.getString('category');
+        const catMap  = { regular: config.appealsCatRegular, staff: config.appealsCatStaff, cyber: config.appealsCatCyber };
+        const names   = { regular: 'Regular Appeals', staff: 'Staff Tickets', cyber: 'Cyber Security' };
+        await interaction.channel.setParent(catMap[choice], { lockPermissions: false });
+        return interaction.reply({ content: `✅ Ticket moved to **${names[choice]}**.`, ephemeral: true });
+      }
+    }
+
+    return; // unhandled interaction from appeals guild — don't fall through to main guild logic
+  }
 
   // Button: End Poll
   if (interaction.isButton() && interaction.customId.startsWith('endpoll_')) {
@@ -219,6 +530,10 @@ client.on('interactionCreate', async interaction => {
       const hasOverride = interaction.member?.roles?.cache?.some(r => overrideRoles.includes(r.id));
       if (hasOverride) effectiveTier = 'staff';
     }
+    // SSU fallback: check the SSU role directly on the member in case main guild fetch failed
+    if (!tierAllows(effectiveTier, required) && required === 'ssu') {
+      if (interaction.member?.roles?.cache?.has(config.ssuRoleId)) effectiveTier = 'ssu';
+    }
 
     if (!tierAllows(effectiveTier, required)) {
       const labels = { staff: 'Staff', ssu: 'SSU', admin: 'Administrator' };
@@ -269,7 +584,7 @@ async function handlePingWarn(message) {
     const { threshold, autoWarn: shouldAutoWarn } = entry;
 
     if (count === 1) {
-      await message.reply({ content: `⚠️ **Warning** — <@${mentionedId}> does not want to be pinged.` }).catch(() => {});
+      await message.reply({ content: `⚠️ **Warning** — <@${mentionedId}> does not want to be pinged.`, allowedMentions: { parse: [] } }).catch(() => {});
 
     } else if (count < threshold) {
       const remaining = threshold - count;
@@ -285,12 +600,12 @@ async function handlePingWarn(message) {
       if (shouldAutoWarn) {
         try {
           caseId = await autoWarn(message.client, message.guild, message.author, message.client.user, reason);
-          await message.reply({ content: `🚨 <@${message.author.id}> has been formally warned (Case #${caseId}) for repeatedly pinging <@${mentionedId}>.` }).catch(() => {});
+          await message.reply({ content: `🚨 <@${message.author.id}> has been formally warned (Case #${caseId}) for repeatedly pinging <@${mentionedId}>.`, allowedMentions: { parse: [] } }).catch(() => {});
         } catch (err) {
           console.error('[PingWarn] autoWarn failed:', err);
         }
       } else {
-        await message.reply({ content: `⚠️ <@${message.author.id}> has reached the ping limit for <@${mentionedId}>. Mods have been notified.` }).catch(() => {});
+        await message.reply({ content: `⚠️ <@${message.author.id}> has reached the ping limit for <@${mentionedId}>. Mods have been notified.`, allowedMentions: { parse: [] } }).catch(() => {});
       }
 
       // Always post a forum report to staff punishments

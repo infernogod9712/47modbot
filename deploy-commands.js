@@ -18,9 +18,14 @@ const rest = new REST({ version: '10' }).setToken(config.token);
 
 (async () => {
   try {
-    console.log(`Registering ${commands.length} slash commands globally...`);
+    // Clear guild-specific overrides (removes duplicates)
+    console.log('Clearing appeals guild overrides...');
+    await rest.put(Routes.applicationGuildCommands(config.clientId, config.appealsGuildId), { body: [] });
+
+    // Register everything globally
+    console.log(`Registering ${commands.length} commands globally...`);
     await rest.put(Routes.applicationCommands(config.clientId), { body: commands });
-    console.log('Done! Commands registered. May take up to 1 hour to appear in all servers.');
+    console.log('Done. /appealspanel and /migrate are global but will reply "appeals server only" elsewhere.');
   } catch (err) {
     console.error('Failed to register commands:', err);
   }

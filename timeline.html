@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>47ModBot — Development Timeline</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0e0e12;
+      color: #d4d4e0;
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      padding: 64px 24px 96px;
+    }
+
+    .wrapper {
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    /* Header */
+    header {
+      margin-bottom: 56px;
+    }
+
+    header h1 {
+      font-size: 20px;
+      font-weight: 600;
+      color: #fff;
+      letter-spacing: -0.01em;
+      margin-bottom: 6px;
+    }
+
+    header p {
+      font-size: 13px;
+      color: #555;
+      letter-spacing: 0.02em;
+    }
+
+    /* Timeline */
+    .timeline {
+      position: relative;
+      padding-left: 36px;
+    }
+
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 8px;
+      top: 8px;
+      bottom: 8px;
+      width: 1px;
+      background: linear-gradient(to bottom, #3a3a5c, #2a2a3a);
+    }
+
+    .event {
+      position: relative;
+      margin-bottom: 28px;
+    }
+
+    .event:last-child { margin-bottom: 0; }
+
+    /* Dot */
+    .event::before {
+      content: '';
+      position: absolute;
+      left: -30px;
+      top: 20px;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #5b5bd6;
+      box-shadow: 0 0 0 3px rgba(91, 91, 214, 0.15);
+    }
+
+    /* Card */
+    .card {
+      background: #16161e;
+      border: 1px solid #222230;
+      border-radius: 8px;
+      padding: 20px 22px;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+
+    .card:hover {
+      border-color: #33334a;
+      transform: translateX(3px);
+    }
+
+    .card h2 {
+      font-size: 15px;
+      font-weight: 600;
+      color: #eeeef8;
+      margin-bottom: 12px;
+      letter-spacing: -0.01em;
+    }
+
+    .detail {
+      font-size: 13px;
+      color: #666;
+      line-height: 1.65;
+    }
+
+    /* Tags */
+    .tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .tag {
+      font-size: 12px;
+      font-weight: 500;
+      padding: 3px 10px;
+      border-radius: 4px;
+      background: #1e1e2e;
+      color: #8888cc;
+      border: 1px solid #2a2a42;
+    }
+
+    /* Bullets */
+    .bullets {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .bullets li {
+      font-size: 13px;
+      color: #666;
+      padding-left: 14px;
+      position: relative;
+    }
+
+    .bullets li::before {
+      content: '·';
+      position: absolute;
+      left: 0;
+      color: #444;
+      font-size: 16px;
+      line-height: 1.1;
+    }
+
+    footer {
+      margin-top: 60px;
+      font-size: 12px;
+      color: #333;
+      letter-spacing: 0.04em;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+
+    <header>
+      <h1>47ModBot — Development Timeline</h1>
+      <p>S47 Unified Moderation System</p>
+    </header>
+
+    <div class="timeline">
+
+      <div class="event">
+        <div class="card">
+          <h2>Minor Command Additions</h2>
+          <div class="tags">
+            <span class="tag">Purge</span>
+            <span class="tag">Lockdown</span>
+            <span class="tag">FindID</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="event">
+        <div class="card">
+          <h2>Rbx Shift Log</h2>
+          <p class="detail">Will later be equipped with ingame script</p>
+        </div>
+      </div>
+
+      <div class="event">
+        <div class="card">
+          <h2>Staff Blacklist Command</h2>
+          <ul class="bullets">
+            <li>Add SBL role</li>
+            <li>Kick from staff hub</li>
+            <li>Remove all staff roles</li>
+          </ul>
+        </div>
+      </div>
+
+    </div>
+
+    <footer>47ModBot &mdash; Internal Use Only</footer>
+
+  </div>
+</body>
+</html>

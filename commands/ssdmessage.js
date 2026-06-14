@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { setSessionStatus } = require('../handlers/ssu');
+const { setHost } = require('../handlers/session');
 const config = require('../config');
 
 module.exports = {
@@ -26,16 +27,16 @@ module.exports = {
       )
       .setImage(screenshot.url);
 
-    // Delete the last startup message
+    // Bulk-clear the entire startup channel
     try {
       const startupChannel = await interaction.client.channels.fetch(config.ssuStartupChannelId);
-      const messages = await startupChannel.messages.fetch({ limit: 1 });
-      const last = messages.first();
-      if (last) await last.delete();
+      const messages = await startupChannel.messages.fetch({ limit: 100 });
+      if (messages.size > 0) await startupChannel.bulkDelete(messages, true);
     } catch (err) {
-      console.error('[ssdmessage] Could not delete startup message:', err.message);
+      console.error('[ssdmessage] Could not clear startup channel:', err.message);
     }
 
+    setHost(null);
     await shutdownChannel.send({ embeds: [embed] });
     await interaction.editReply({ content: '✅ Shutdown message sent! Status set to 🔴 OFFLINE.' });
 

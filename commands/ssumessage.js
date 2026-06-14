@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { setSessionStatus } = require('../handlers/ssu');
+const { setHost } = require('../handlers/session');
 const config = require('../config');
 
 module.exports = {
@@ -53,6 +54,7 @@ module.exports = {
 
     const startupChannel = await interaction.client.channels.fetch(config.ssuStartupChannelId);
     await startupChannel.send({ embeds: [embed] });
+    setHost(ssuh.id);
     await interaction.editReply({ content: '✅ Start up message sent! Status set to 🟢 ONLINE.' });
 
     // Update status channel after replying so it doesn't block
